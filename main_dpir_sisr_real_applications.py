@@ -58,7 +58,7 @@ def main():
     """
     ##############################################################################
 
-    testset_name = 'Set3C'               # set test set,  'set5' | 'srbsd68'
+    testset_name = '21_Sep_2020_Field_test'               # set test set,  'set5' | 'srbsd68'
     noise_level_img = 3                  # set noise level of image, from [3, 25], set 3 for clean image
     model_name = 'drunet_color' # 'ircnn_color'         # set denoiser, | 'drunet_color' | 'ircnn_gray' | 'drunet_gray' | 'ircnn_color'
     sf = 2                               # set scale factor, 1, 2, 3, 4

@@ -10,6 +10,8 @@ from utils import utils_logger
 from utils import utils_model
 from utils import utils_image as util
 
+from skimage.restoration import estimate_sigma
+
 
 """
 Spyder (Python 3.7)
@@ -50,11 +52,11 @@ def main():
     # Preparation
     # ----------------------------------------
 
-    noise_level_img = 50                 # default: 15, set AWGN noise level for noisy image
-    noise_level_model = noise_level_img  # set noise level for model
+    #noise_level_img = 50                 # default: 15, set AWGN noise level for noisy image
+    #noise_level_model = noise_level_img  # set noise level for model
     model_name = 'drunet_color'           # set denoiser model, 'drunet_gray' | 'drunet_color'
     # 'bsd68'               # set test set,  'bsd68' | 'cbsd68' | 'set12'
-    testset_name = '21_Sep_2020_Field_test'
+    testset_name = 'g150_e400000' #'21_Sep_2020_Field_test'
     x8 = False                           # default: False, x8 to boost performance
     show_img = False                     # default: False
     border = 0                           # shave boader to calculate PSNR and SSIM
@@ -106,7 +108,7 @@ def main():
     test_results['psnr'] = []
     test_results['ssim'] = []
 
-    logger.info('model_name:{}, model sigma:{}, image sigma:{}'.format(model_name, noise_level_img, noise_level_model))
+    logger.info('model_name:{}'.format(model_name))
     logger.info(L_path)
     L_paths = util.get_image_paths(L_path)
 
@@ -118,29 +120,35 @@ def main():
 
         img_name, ext = os.path.splitext(os.path.basename(img))
         # logger.info('{:->4d}--> {:>10s}'.format(idx+1, img_name+ext))
-        img_H = util.imread_uint(img, n_channels=n_channels)
-        img_L = util.uint2single(img_H)
+        imgInput = util.read_img(img)
+        imgOrg = imgInput
+        imgNoiseLevel = estimate_sigma(imgInput, multichannel=True, average_sigmas=True) * 9
+        logger.info(f'image noise nevel: {imgNoiseLevel}')
+        
+        #img_H = util.imread_uint(img, n_channels=n_channels)
+        # sigma_est = estimate_sigma(img_H, multichannel=True, average_sigmas=True)
+        #img_L = util.uint2single(img_H)
 
-        # Add noise without clipping
-        np.random.seed(seed=0)  # for reproducibility
-        img_L += np.random.normal(0, noise_level_img/255., img_L.shape)
+        # # Add noise without clipping
+        # np.random.seed(seed=0)  # for reproducibility
+        # img_L += np.random.normal(0, noise_level_img/255., img_L.shape)
 
-        util.imshow(util.single2uint(img_L), title='Noisy image with noise level {}'.format(noise_level_img)) if show_img else None
+        util.imshow(util.single2uint(imgInput), title='Noisy image with noise level {}'.format(imgNoiseLevel*255.0)) if show_img else None
 
-        img_L = util.single2tensor4(img_L)
-        img_L = torch.cat((img_L, torch.FloatTensor([noise_level_model/255.]).repeat(1, 1, img_L.shape[2], img_L.shape[3])), dim=1)
-        img_L = img_L.to(device)
+        imgInput = util.single2tensor4(imgInput)
+        imgInput = torch.cat((imgInput, torch.FloatTensor([imgNoiseLevel]).repeat(1, 1, imgInput.shape[2], imgInput.shape[3])), dim=1)
+        imgInput = imgInput.to(device)
 
         # ------------------------------------
         # (2) img_E
         # ------------------------------------
-
-        if not x8 and img_L.size(2)//8==0 and img_L.size(3)//8==0:
-            img_E = model(img_L)
-        elif not x8 and (img_L.size(2)//8!=0 or img_L.size(3)//8!=0):
-            img_E = utils_model.test_mode(model, img_L, refield=64, mode=5)
-        elif x8:
-            img_E = utils_model.test_mode(model, img_L, mode=3)
+        img_E = model(imgInput)
+        # if not x8 and imgInput.size(2)//8==0 and imgInput.size(3)//8==0:
+        #     img_E = model(imgInput)
+        # elif not x8 and (imgInput.size(2)//8!=0 or imgInput.size(3)//8!=0):
+        #     img_E = utils_model.test_mode(model, imgInput, refield=64, mode=5)
+        # elif x8:
+        #     img_E = utils_model.test_mode(model, imgInput, mode=3)
 
         img_E = util.tensor2uint(img_E)
 
@@ -149,9 +157,9 @@ def main():
         # --------------------------------
 
         if n_channels == 1:
-            img_H = img_H.squeeze() 
-        psnr = util.calculate_psnr(img_E, img_H, border=border)
-        ssim = util.calculate_ssim(img_E, img_H, border=border)
+            imgOrg = imgOrg.squeeze() 
+        psnr = util.calculate_psnr(img_E, imgOrg, border=border)
+        ssim = util.calculate_ssim(img_E, imgOrg, border=border)
         test_results['psnr'].append(psnr)
         test_results['ssim'].append(ssim)
         logger.info('{:s} - PSNR: {:.2f} dB; SSIM: {:.4f}.'.format(img_name+ext, psnr, ssim))
